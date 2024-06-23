@@ -5,59 +5,43 @@ import (
 	"homework/internal/util"
 )
 
+// TODO: add LRU cache using Strategy pattern
+type packageContext struct {
+	strategies map[models.PackageType]PackageStrategy
+}
+
 type PackageService interface {
 	ValidatePackage(weight models.Weight, packageType models.PackageType) error
 	ApplyPackage(order *models.Order, packageType models.PackageType)
 }
 
-// TODO: refactor from switch to map
-// TODO: add LRU cache using Strategy pattern
-// TODO: refactor PackageService to strategy pattern
-type packageService struct {
-	filmPackage   *FilmPackage
-	packetPackage *PacketPackage
-	boxPackage    *BoxPackage
+type PackageStrategy interface {
+	Validate(weight models.Weight) error
+	Apply(order *models.Order)
 }
 
 func NewPackageService() PackageService {
-	return &packageService{
-		filmPackage:   NewFilmPackage(),
-		packetPackage: NewPacketPackage(),
-		boxPackage:    NewBoxPackage(),
+	return &packageContext{
+		strategies: map[models.PackageType]PackageStrategy{
+			FilmType:   NewFilmPackage(),
+			PacketType: NewPacketPackage(),
+			BoxType:    NewBoxPackage(),
+		},
 	}
 }
 
-func (ps *packageService) ValidatePackage(weight models.Weight, packageType models.PackageType) error {
-	switch packageType {
-	case FilmType:
-		if err := ps.filmPackage.Validate(weight); err != nil {
-			return err
-		}
-	case PacketType:
-		if err := ps.packetPackage.Validate(weight); err != nil {
-			return err
-		}
-	case BoxType:
-		if err := ps.boxPackage.Validate(weight); err != nil {
-			return err
-		}
-	case "":
-		return nil
-	default:
-		return util.ErrPackageTypeInvalid
+func (pc *packageContext) ValidatePackage(weight models.Weight, packageType models.PackageType) error {
+	if strategy, ok := pc.strategies[packageType]; ok {
+		return strategy.Validate(weight)
 	}
-	return nil
+	return util.ErrPackageTypeInvalid
 }
 
-func (ps *packageService) ApplyPackage(order *models.Order, packageType models.PackageType) {
-	switch packageType {
-	case FilmType:
-		ps.filmPackage.Apply(order)
-	case PacketType:
-		ps.packetPackage.Apply(order)
-	case BoxType:
-		ps.boxPackage.Apply(order)
-	case "":
-		ps.filmPackage.Apply(order)
+func (pc *packageContext) ApplyPackage(order *models.Order, packageType models.PackageType) {
+	if strategy, ok := pc.strategies[packageType]; ok {
+		strategy.Apply(order)
+		return
 	}
+	//Assume that film has no weight limit
+	pc.strategies[FilmType].Apply(order)
 }

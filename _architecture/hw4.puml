@@ -1,0 +1,172 @@
+@startuml
+skinparam linetype ortho
+class main {
+    - orderService service.OrderService
+    - repository storage.db.Repository
+}
+namespace view {
+    class CLI << (S,Aquamarine) >> {
+        - orderService service.OrderService
+        - commandList []command
+        - maxGoroutines uint64
+        - activeGoroutines uint64
+
+        - commandHandler(commandChannel <font color=blue>chan</font> string, semaphore <font color=blue>chan</font> <font color=blue>struct</font>{}, done <font color=blue>chan</font> <font color=blue>struct</font>{}, wg *sync.WaitGroup)
+        - worker(cmd string, id uint64, semaphore <font color=blue>chan</font> <font color=blue>struct</font>{}, wg *sync.WaitGroup)
+        - setMaxGoroutines(input string, semaphore *<font color=blue>chan</font> <font color=blue>struct</font>{}) error
+        - processCommand(input string)
+        - acceptOrder(args []string) error
+        - issueOrders(args []string) error
+        - acceptReturn(args []string) error
+        - returnOrderToCourier(args []string) error
+        - listReturns(args []string) error
+        - listOrders(args []string) error
+        - help()
+
+        + Run() error
+
+    }
+
+    class command << (S,Aquamarine) >> {
+        - name string
+        - description string
+
+    }
+}
+namespace service {
+    interface OrderService  {
+        + Accept(id string, userId string, dateStr string, orderPrice string, weight string, packageType string) error
+        + ReturnToCourier(id string) error
+        + Issue(ids []string) error
+        + Return(id string, userId string) error
+        + ListReturns(offset string, limit string) ([]models.Order, error)
+        + ListOrders(userId string, offset string, limit string) ([]models.Order, error)
+        + PrintList(orders []models.Order)
+
+    }
+    class orderService << (S,Aquamarine) >> {
+        - repository storage.Storage
+
+        + Accept(id string, userId string, dateStr string, orderPrice string, weight string, packageType string) error
+        + Issue(ids []string) error
+        + Return(id string, userId string) error
+        + ReturnToCourier(id string) error
+        + ListReturns(offset string, limit string) ([]models.Order, error)
+        + ListOrders(userId string, offset string, limit string) ([]models.Order, error)
+        + PrintList(orders []models.Order)
+    }
+    class Package << (S,Aquamarine) >> {
+        + Validate(weight float64) error
+    }
+    interface PackageInterface  {
+        + ValidatePackage(weight float64) error
+        + GetType() string
+        + GetPrice() float64
+    }
+    class FilmPackage << (S,Aquamarine) >> {
+        + ValidatePackage(weight float64) error
+        + GetType() string
+        + GetPrice() float64
+    }
+    class PacketPackage << (S,Aquamarine) >> {
+        + ValidatePackage(weight float64) error
+        + GetType() string
+        + GetPrice() float64
+    }
+    class BoxPackage << (S,Aquamarine) >> {
+        + ValidatePackage(weight float64) error
+        + GetType() string
+        + GetPrice() float64
+    }
+}
+
+namespace storage {
+    interface Storage  {
+        + Insert(order models.Order) error
+        + Update(order models.Order) error
+        + IssueUpdate(orders []models.Order) error
+        + Delete(id string) error
+        + Get(id string) models.Order
+        + GetReturns(offset int, limit int) ([]models.Order, error)
+        + GetOrders(userId string, offset int, limit int) ([]models.Order, error)
+
+    }
+    namespace db {
+        class Repository << (S,Aquamarine) >> {
+            - pool *pgxpool.Pool
+            - ctx context.Context
+
+            + Insert(order models.Order) error
+            + Update(order models.Order) error
+            + IssueUpdate(orders []models.Order) error
+            + Delete(id string) error
+            + Get(id string) models.Order
+            + GetReturns(offset int, limit int) ([]models.Order, error)
+            + GetOrders(userId string, offset int, limit int) ([]models.Order, error)
+
+        }
+    }
+}
+namespace models {
+    class Order << (S,Aquamarine) >> {
+        + ID string
+        + UserID string
+        + StorageUntil time.Time
+        + Issued bool
+        + IssuedAt time.Time
+        + Returned bool
+        + OrderPrice float64
+        + Weight float64
+        + PackageType string
+        + PackagePrice float64
+        + Hash string
+    }
+    class Config << (S,Aquamarine) >> {
+            + User string
+            + Password string
+            + Host string
+            + Port string
+            + DBName string
+            + Attempts int
+            + Timeout time.Duration
+
+        }
+}
+
+namespace schema {
+    class Orders {
+        PK id________  VARCHAR
+        user_id_______VARCHAR
+        storage_until__ TIMESTAMPTZ
+        issued_______ BOOLEAN
+        issued_at____  TIMESTAMPTZ,
+        returned_____  BOOLEAN
+        order_price___ FLOAT
+        weight_______ FLOAT
+        package_type_  VARCHAR
+        package_price_FLOAT
+        hash________   VARCHAR
+    }
+}
+
+
+main "has a" --* view.CLI
+view.CLI -->service.OrderService: uses
+view.CLI --* command: has a
+
+service.OrderService <|-- orderService: implements
+orderService --> storage.Storage: uses
+orderService --> Package: uses
+orderService *-- models.Order: has a
+
+service.Package --* service.PackageInterface: extends
+
+service.BoxPackage --|> service.PackageInterface: implements
+service.FilmPackage --|> service.PackageInterface: implements
+service.PacketPackage --|> service.PackageInterface: implements
+
+storage.Storage <|-- storage.db.Repository: implements
+storage.db.Repository *-- models.Config: has a
+models.Order <-[dashed]- schema.Orders: realises
+
+@enduml
